@@ -22,7 +22,7 @@ def eval_raw(file, fldata, eval_psd, no_samples):
     data = list(map(convert, f.readlines()[
                 STARTUP_LINES: no_samples + STARTUP_LINES]))
     f.close()
-    # data = signal.detrend(data)
+    data = signal.detrend(data)
     std_dev = np.std(data)
     mean = np.mean(data)
     print(f'std deviation: {std_dev}')
