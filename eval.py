@@ -13,23 +13,32 @@ F_S = 503.5
 D_PER_LSB = 5.314404177170218e-06
 
 
-def eval_raw(file, fldata, eval_psd, no_samples):
+def eval_raw(file, fldata, eval_psd, no_samples, skip, temp_curr):
     f = open(file, 'r')
     if fldata:
-        def convert(i): return float(i)
+        if temp_curr:
+            def convert(i): return [float(j) for j in i.split(", ")]
+        else:
+            def convert(i): return float(i)
     else:
         def convert(i): return int(i)
     data = list(map(convert, f.readlines()[
-                STARTUP_LINES: no_samples + STARTUP_LINES]))
+                STARTUP_LINES + skip: no_samples + STARTUP_LINES + skip]))
     f.close()
-    data = signal.detrend(data)
-    std_dev = np.std(data)
+    if temp_curr:
+        curr = [j for _, j in data]
+        data = [i for i, _ in data]
     mean = np.mean(data)
+    data = signal.detrend(data)
+    curr = signal.detrend(curr)
+    std_dev = np.std(data)
     print(f'std deviation: {std_dev}')
     print(f'mean value: {mean}')
     if eval_psd:
         fig, ax = plt.subplots(2)
         fig.tight_layout()
+        if temp_curr:
+            ax[0].plot(curr)
         ax[0].plot(data)
         ax[0].grid()
         ax[0].set_xlim(0, no_samples)
@@ -38,6 +47,8 @@ def eval_raw(file, fldata, eval_psd, no_samples):
         ax[0].set_title("Time domain data")
         ax[0].set_xlabel("sample nr.")
         ax[0].set_ylabel("adc code")
+        if temp_curr:
+            pxx, freqs = ax[1].psd(curr, Fs=F_S, NFFT=no_samples)
         pxx, freqs = ax[1].psd(data, Fs=F_S, NFFT=no_samples)
         ax[1].set_title("data PSD (dB(LSB^2)/Hz)")
         ax[1].set_xscale("log")
@@ -53,8 +64,7 @@ def eval_raw(file, fldata, eval_psd, no_samples):
         # 0.01 - 1 Hz -> ~1Hz bandwidth
         rms_noise = np.sqrt(sum/nr_samples)
 
-        print(f'RMS noise in 0.01-1 Hz in LSB: {rms_noise}')
-        print(f'in °K: {rms_noise * D_PER_LSB}')
+        print(f'RMS noise in 0.01-1 Hz: {rms_noise}')
     else:
         fig, ax = plt.subplots(1)
         fig.tight_layout()
@@ -80,15 +90,19 @@ def main():
                         help='data file location')
     parser.add_argument('--no_samples', '-s', type=int, default=1_000_000,
                         help='Number Samples to process')
+    parser.add_argument('--skip', '-k', type=int, default=0,
+                        help='Number of samples to skip at the beginning of dataset.')
 
     args = parser.parse_args()
 
     if args.mode == "raw":
-        eval_raw(args.file, False, True, args.no_samples)
+        eval_raw(args.file, False, True, args.no_samples, args.skip, False)
     elif args.mode == "float":
-        eval_raw(args.file, True, True, args.no_samples)
+        eval_raw(args.file, True, True, args.no_samples, args.skip, False)
     elif args.mode == "samples":
-        eval_raw(args.file, True, False, args.no_samples)
+        eval_raw(args.file, True, False, args.no_samples, args.skip, False)
+    elif args.mode == "temp_curr_psd":
+        eval_raw(args.file, True, True, args.no_samples, args.skip, True)
     else:
         print("undefined eval mode")
 
